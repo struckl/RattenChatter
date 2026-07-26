@@ -20,6 +20,7 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<float> Volume;
     internal static ConfigEntry<float> MinPauseSeconds;
     internal static ConfigEntry<float> MaxPauseSeconds;
+    internal static ConfigEntry<float> BusyNetChance;
 
     private void Awake()
     {
@@ -27,9 +28,10 @@ public class Plugin : BaseUnityPlugin
         AssetsPath = Path.Combine(Paths.PluginPath, "RattenChatter", "Assets");
 
         BindConfig();
-        RadioChatter.Initialize();
-
         new Harmony(Guid).PatchAll();
+        if (Enabled.Value)
+            StartCoroutine(RadioChatter.LoadAsync());
+
         Logger.LogInfo($"{Name} {Version} loaded.");
     }
 
@@ -52,5 +54,9 @@ public class Plugin : BaseUnityPlugin
         MaxPauseSeconds = Config.Bind(
             "Radio Chatter", "MaxPauseSeconds", 45f,
             "Maximum silence between chatter conversations.");
+        BusyNetChance = Config.Bind(
+            "Radio Chatter", "BusyNetChance", 0.2f,
+            "Chance (0-1) that the next conversation starts within a few seconds "
+            + "instead of after the usual pause, so traffic comes in waves.");
     }
 }

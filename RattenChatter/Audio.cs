@@ -1,3 +1,5 @@
+using System;
+using System.Collections;
 using System.IO;
 using HarmonyLib;
 using UnityEngine;
@@ -8,23 +10,27 @@ namespace RattenChatter;
 /// <summary>Loads audio clips from the plugin's Assets folder.</summary>
 internal static class AudioLoader
 {
-    public static AudioClip Load(string fileName)
+    /// <summary>
+    /// Loads one clip without blocking the main thread. There are well over a
+    /// hundred chatter clips, so loading them synchronously during startup
+    /// would stall the game for seconds; the caller drives this from a
+    /// coroutine and the chatter simply isn't available until it finishes.
+    /// </summary>
+    public static IEnumerator LoadAsync(string fileName, Action<AudioClip> onLoaded)
     {
         string path = Path.Combine(Plugin.AssetsPath, fileName);
-        using var request = UnityWebRequestMultimedia.GetAudioClip($"file://{path}", AudioType.MPEG);
-        request.SendWebRequest();
-        while (!request.isDone)
-        {
-            // Busy-wait is acceptable here: only runs once during plugin startup
-            // and the files are small local reads.
-        }
+        using UnityWebRequest request =
+            UnityWebRequestMultimedia.GetAudioClip($"file://{path}", AudioType.MPEG);
+        yield return request.SendWebRequest();
 
         if (request.result != UnityWebRequest.Result.Success)
         {
             Plugin.Logger.LogError($"Failed to load audio clip '{path}': {request.error}");
-            return null;
+            yield break;
         }
-        return DownloadHandlerAudioClip.GetContent(request);
+        AudioClip clip = DownloadHandlerAudioClip.GetContent(request);
+        if (clip != null)
+            onLoaded(clip);
     }
 }
 
