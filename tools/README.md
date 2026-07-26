@@ -68,6 +68,21 @@ a snap answer, `1.2` is normal, `3.0` is someone actually looking something up.
 Write numbers as words ("two seven zero", "flight level two four zero") or the
 TTS reads them like a calculator.
 
+Every exchange is **two speakers and two or three lines, alternating**. Two
+aircraft, or an aircraft and a tower, or an aircraft and mission control. A
+third voice turns something you overhear into a scene, and the player stops
+flying and starts listening. `generate_chatter.py` checks this before it
+generates anything and refuses to build if an exchange breaks it:
+
+```
+conversations.py:
+  banter-checklist: RAZOR TWO speaks twice in a row
+  cas-nine-line: 3 speaker(s), want exactly 2
+```
+
+Want a longer scene? Split it into consecutive exchanges — `BusyNetChance` in
+the plugin will sometimes run two back to back anyway.
+
 New callsigns need an entry in `cast.py`. `python tools/generate_chatter.py
 --list-voices` prints everything available; there are around forty English
 voices across a dozen accents, so there is no need to reuse one.
@@ -88,16 +103,39 @@ Per line, after TTS:
 4. Hard compression, the way a transmitter's automatic level control squashes
    everything to the same loudness.
 5. Soft clipping for transmitter grit.
-6. An open-carrier hiss bed, a mic click on the way in, a squelch tail on the
-   way out.
-7. On about one line in seven, a brief signal dropout mid-word.
+6. Rauschen, in two layers: a steady band-limited hiss bed for the open
+   carrier, plus a sparser crackle layer of individual pops and ticks riding on
+   top of it. The crackle is velvet noise — random impulses rather than a
+   continuous wash — which is what makes static read as static instead of as a
+   fan. The hiss starts a fraction of a second before the mic click, so you
+   hear the channel open before anyone speaks.
+7. A mic click on the way in and a squelch tail on the way out.
+8. On about one line in seven, a brief signal dropout mid-word.
 
 How aggressive steps 2–6 are depends on the speaker's `profile` in `cast.py`.
-An AWACS with a real antenna (`station`) is clean and loud; a forward air
-controller on a handheld (`ground`) is tinny; someone at the edge of the map
-(`far`) is thin and hissy. Everything is limited to the same final level,
+An AWACS with a real antenna (`station`) is clean; a forward air controller on
+a handheld (`ground`) is tinny; someone at the edge of the map (`far`) is thin
+and hissy with busier crackle. Everything is limited to the same final level,
 because a receiver's AGC does that too — so distance reads as tone and noise
 rather than as volume.
+
+### Making it louder or quieter
+
+The chatter is mixed deliberately low: it's something you overhear while
+flying, not a voice in the room. Two knobs at the top of
+`generate_chatter.py`:
+
+| | |
+| --- | --- |
+| `OUTPUT_CEILING` | The limiter ceiling everything lands on. `0.28` is background; raise it toward `0.5` to bring the net forward. |
+| `OUTPUT_GAIN_DB` | How hard it's driven into that ceiling. Higher means the quiet parts come up too, not just the peaks. |
+
+`hiss` and `crackle` per profile control how much Rauschen sits under the
+voice. Turning those up pushes a speaker further away without changing how
+loud they are.
+
+Changing any of these means regenerating. For a quick level change with no
+rebuild, the plugin's `Volume` setting scales all of it at runtime.
 
 Randomness is seeded from the conversation tag and line number, so rebuilding
 produces the same pacing and the same noise. Only what you actually edited

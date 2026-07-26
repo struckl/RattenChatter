@@ -4,25 +4,33 @@ Ambient radio chatter for
 [Nuclear Option](https://store.steampowered.com/app/2168680/Nuclear_Option/),
 so the cockpit never feels dead quiet.
 
-Around fifty conversations play in the background while you fly — check-ins,
-intercepts, SEAD calls, tanker joins, carrier approaches, a nine-line from a
-forward air controller, a wingman who will not hold formation, and the odd
-release authorisation you would rather not have overheard. Each one is a real
-exchange between two or more people who answer each other, not a bag of
-one-liners.
+Around seventy short conversations play quietly in the background while you fly
+— check-ins, intercepts, SEAD calls, tanker joins, carrier approaches, a
+nine-line from a forward air controller, a wingman who will not hold formation,
+and the odd release authorisation you would rather not have overheard.
 
-Every callsign has its own voice — around thirty of them, spread across a
-dozen accents — and every voice goes through a full radio treatment: band-limited
-to a comms channel, compressed flat by the transmitter's level control, dirtied
-with clipping and open-carrier hiss, opened with a mic click and closed with a
-squelch tail. An AWACS with a real antenna sounds nothing like a forward air
-controller on a handheld or a wingman at the edge of the map.
+Every one is two people and two or three lines: two aircraft, or an aircraft and
+a tower, or an aircraft and mission control. One call, one answer, maybe a
+closing word. Short enough that you catch it without stopping what you were
+doing, and never a crowd scene that pulls your attention out of the cockpit.
+
+Every callsign has its own voice — around thirty of them across forty distinct
+neural voices and a dozen accents — and every voice goes through a full radio
+treatment: band-limited to a comms channel, compressed flat by the
+transmitter's level control, dirtied with clipping, and buried in Rauschen —
+a steady open-carrier hiss with a crackle of pops and ticks riding on top,
+opening a fraction of a second before the mic click and closing with a squelch
+tail. An AWACS with a real antenna sounds nothing like a forward air controller
+on a handheld or a wingman at the edge of the map.
+
+It is mixed to sit behind the aircraft rather than in front of it. Turn `Volume`
+up if you want the net closer.
 
 Pacing comes from the script rather than a fixed timer, so a snap "Two." lands
 straight away while "stand by" leaves an actual gap. Conversations are drawn
 from a shuffle bag — you hear all of them before any repeats — and now and then
 the net stays busy and a second exchange starts on top of the last one instead
-of after the usual silence.
+of after the usual silence, which is what a genuinely busy net sounds like.
 
 Chatter holds off while something else is talking on the interface channel, so
 it never steps on a voice warning from the game or from another mod, and it
@@ -60,7 +68,7 @@ with [ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationMana
 | Setting | Default | Description |
 | --- | --- | --- |
 | `Enabled` | `true` | Play ambient radio chatter while flying. |
-| `Volume` | `1.2` | Chatter volume relative to other interface audio (voice warnings play at `3.0`). |
+| `Volume` | `1.2` | Chatter volume relative to other interface audio (voice warnings play at `3.0`). The clips are already mixed low; raise this to bring the net forward. |
 | `MinPauseSeconds` | `12` | Minimum silence between conversations. |
 | `MaxPauseSeconds` | `45` | Maximum silence between conversations. |
 | `BusyNetChance` | `0.2` | Chance the next conversation starts within a few seconds instead of after the usual pause, so traffic comes in waves. Set to `0` for evenly spaced chatter. |
@@ -70,7 +78,8 @@ with [ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationMana
 The shipped voices are generated, and the whole pipeline is in
 [`tools/`](tools/) — scripts, cast, text-to-speech and the radio filter chain.
 See [tools/README.md](tools/README.md). Adding a conversation is a handful of
-lines of dialogue plus one command.
+lines of dialogue plus one command, and that is also where the knobs for
+loudness and how much Rauschen sits under the voice live.
 
 If you would rather drop in your own recordings, the plugin reads clips two ways.
 

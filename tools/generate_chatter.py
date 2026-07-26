@@ -56,27 +56,61 @@ OUT_DIR = REPO / "RattenChatter" / "Assets" / "chatter"
 SAMPLE_RATE = 24000
 OUT_SAMPLE_RATE = 22050
 
+# How loud the finished transmissions sit. This is deliberately well below full
+# scale: the chatter is background, something you overhear while flying, not a
+# voice in the room. Raise OUTPUT_CEILING if you want it further forward.
+OUTPUT_GAIN_DB = 2
+OUTPUT_CEILING = 0.28
+
 # How each kind of transmitter sounds.
 #   hp/lp      band limits in Hz
 #   presence   dB bump at 2 kHz
 #   ratio      compressor ratio
 #   makeup     compressor makeup gain in dB
 #   drive      soft-clip threshold — lower means more distortion
-#   hiss       amplitude of the open-carrier noise bed
+#   hiss       amplitude of the steady open-carrier hiss under the voice
+#   crackle    amplitude of the sparse crackle/static layer on top of the hiss
 #   level      final voice level
 RADIO_PROFILES = {
-    "near": dict(hp=300, lp=3300, presence=4.0, ratio=5, makeup=4, drive=0.72, hiss=0.030, level=1.00),
-    "far": dict(hp=430, lp=2500, presence=6.5, ratio=9, makeup=7, drive=0.52, hiss=0.080, level=0.82),
-    "ground": dict(hp=420, lp=2900, presence=7.0, ratio=8, makeup=6, drive=0.58, hiss=0.055, level=0.90),
-    "ground_far": dict(hp=520, lp=2300, presence=7.5, ratio=10, makeup=8, drive=0.46, hiss=0.100, level=0.78),
-    "station": dict(hp=280, lp=3400, presence=3.0, ratio=4, makeup=3, drive=0.82, hiss=0.020, level=1.05),
-    "cockpit_hot": dict(hp=320, lp=3100, presence=5.0, ratio=3, makeup=6, drive=0.40, hiss=0.038, level=1.10),
+    "near": dict(hp=300, lp=3300, presence=4.0, ratio=5, makeup=4, drive=0.72, hiss=0.075, crackle=0.10, level=0.92),
+    "far": dict(hp=430, lp=2500, presence=6.5, ratio=9, makeup=7, drive=0.52, hiss=0.170, crackle=0.24, level=0.74),
+    "ground": dict(hp=420, lp=2900, presence=7.0, ratio=8, makeup=6, drive=0.58, hiss=0.120, crackle=0.18, level=0.84),
+    "ground_far": dict(hp=520, lp=2300, presence=7.5, ratio=10, makeup=8, drive=0.46, hiss=0.200, crackle=0.28, level=0.70),
+    "station": dict(hp=280, lp=3400, presence=3.0, ratio=4, makeup=3, drive=0.82, hiss=0.055, crackle=0.07, level=1.00),
+    "cockpit_hot": dict(hp=320, lp=3100, presence=5.0, ratio=3, makeup=6, drive=0.40, hiss=0.090, crackle=0.12, level=1.00),
 }
 
 
 def check_tools() -> None:
     if shutil.which("ffmpeg") is None:
         sys.exit("ffmpeg not found on PATH. Install it and try again.")
+
+
+def validate(conversations) -> None:
+    """Enforce the shape rules from the top of conversations.py.
+
+    These are easy to break by accident while editing and impossible to notice
+    afterwards without listening to all of it, so fail the build instead.
+    """
+    problems: list[str] = []
+    for conv in conversations:
+        tag = conv["tag"]
+        speakers = [name for name, _, _ in conv["lines"]]
+
+        unknown = [name for name in speakers if name not in CAST]
+        if unknown:
+            problems.append(f"{tag}: unknown speaker(s) {', '.join(sorted(set(unknown)))}")
+        if not 2 <= len(speakers) <= 3:
+            problems.append(f"{tag}: {len(speakers)} lines, want 2 or 3")
+        distinct = len(set(speakers))
+        if distinct != 2:
+            problems.append(f"{tag}: {distinct} speaker(s), want exactly 2")
+        for previous, current in zip(speakers, speakers[1:]):
+            if previous == current:
+                problems.append(f"{tag}: {current} speaks twice in a row")
+
+    if problems:
+        sys.exit("conversations.py:\n  " + "\n  ".join(problems))
 
 
 async def list_voices() -> None:
@@ -150,9 +184,16 @@ def build_filtergraph(profile: dict, rng: random.Random, dropout: bool) -> str:
     voice_chain.append(f"volume={profile['level']}")
     voice_chain.append(f"apad=pad_dur={hang}")
 
+    # A moment of open carrier before the mic click, so you hear the channel
+    # open before anyone speaks rather than the noise appearing with the voice.
+    preroll_ms = rng.randint(90, 220)
+
     click_seed = rng.randrange(1, 2**31)
     tail_seed = rng.randrange(1, 2**31)
     hiss_seed = rng.randrange(1, 2**31)
+    crackle_seed = rng.randrange(1, 2**31)
+    # Sparser crackle on a strong signal, busier on a weak one.
+    density = round(rng.uniform(0.02, 0.05) * (1.6 if profile["hiss"] > 0.1 else 1.0), 4)
 
     return (
         f"[0:a]{','.join(voice_chain)}[voice];"
@@ -166,16 +207,21 @@ def build_filtergraph(profile: dict, rng: random.Random, dropout: bool) -> str:
         f"highpass=f=500,lowpass=f=3400,"
         f"afade=t=out:st=0.015:d={round(tail_dur - 0.015, 3)}:curve=log,"
         f"volume={tail_level}[tail];"
-        f"[click][voice][tail]concat=n=3:v=0:a=1[body];"
-        # Open-carrier hiss under the whole transmission.
+        f"[click][voice][tail]concat=n=3:v=0:a=1,adelay={preroll_ms}:all=1[body];"
+        # Steady open-carrier hiss under the whole transmission.
         f"anoisesrc=c=white:r={SAMPLE_RATE}:a=1:d=30:s={hiss_seed},"
         f"highpass=f=400,lowpass=f=2600,volume={profile['hiss']}[hiss];"
+        # Crackle on top of it. Velvet noise is sparse impulses rather than a
+        # continuous wash, which is what makes static sound like static instead
+        # of like a fan: individual pops and ticks riding the hiss.
+        f"anoisesrc=c=velvet:density={density}:r={SAMPLE_RATE}:a=1:d=30:s={crackle_seed},"
+        f"highpass=f=600,lowpass=f=3200,volume={profile['crackle']}[crackle];"
         # Drive everything into a limiter set well below full scale. A real
         # receiver's AGC pins every transmission to roughly the same loudness
         # regardless of how far away the sender is, so the level differences
         # between profiles show up as tone and noise, not as volume.
-        f"[body][hiss]amix=inputs=2:duration=first:normalize=0,"
-        f"volume=5dB,alimiter=limit=0.55:level=disabled,"
+        f"[body][hiss][crackle]amix=inputs=3:duration=first:normalize=0,"
+        f"volume={OUTPUT_GAIN_DB}dB,alimiter=limit={OUTPUT_CEILING}:level=disabled,"
         f"aresample={OUT_SAMPLE_RATE}[out]"
     )
 
@@ -204,6 +250,9 @@ def radio_filter(src: Path, dest: Path, profile_name: str, rng: random.Random) -
 
 async def build(only: str | None) -> None:
     check_tools()
+    # Always validate the whole file, not just the selection, so a broken
+    # exchange cannot hide behind an --only run.
+    validate(CONVERSATIONS)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     selected = [
@@ -216,18 +265,13 @@ async def build(only: str | None) -> None:
 
     if only is None:
         # Full rebuild: clear out the previous set so renumbering never leaves
-        # orphaned files behind that the plugin would still load.
+        # orphaned files behind that the plugin would still load. The manifest
+        # goes too — if this run dies partway through, a leftover manifest
+        # pointing at deleted clips is worse than none at all, and its absence
+        # is how we can tell the build did not finish.
         for stale in OUT_DIR.glob("*.mp3"):
             stale.unlink()
-
-    unknown = {
-        speaker
-        for _, conv in selected
-        for speaker, _, _ in conv["lines"]
-        if speaker not in CAST
-    }
-    if unknown:
-        sys.exit(f"Unknown speakers in conversations.py: {', '.join(sorted(unknown))}")
+        (OUT_DIR / "manifest.txt").unlink(missing_ok=True)
 
     manifest_rows: list[str] = []
     total_lines = sum(len(conv["lines"]) for _, conv in selected)
