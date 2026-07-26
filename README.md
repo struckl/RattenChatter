@@ -9,7 +9,7 @@ check-ins, kill calls, landing clearances — separated by random pauses. Every
 conversation uses a different pilot voice talking to a constant controller
 voice, complete with squelch clicks and radio noise. Chatter holds off while
 something else is talking on the interface channel, so it never steps on a
-voice warning (e.g. [Bitching Ratte](../Bitching%20Ratte)).
+voice warning from the game or from another mod.
 
 Extracted from [MKMods](https://github.com/struckl/MKModsNO) into its own
 plugin so you can run the chatter without the rest of that mod.
@@ -64,11 +64,11 @@ Requires the .NET SDK and a local Nuclear Option install (the game assemblies
 are referenced directly).
 
 ```bash
-dotnet build "Ratten Chatter/RattenChatter.sln" -c Release
+dotnet build RattenChatter.sln -c Release
 ```
 
-The default game directory is `Y:\SteamLibrary\steamapps\common\Nuclear Option`.
-Override it with:
+The default game directory is `Y:\SteamLibrary\steamapps\common\Nuclear Option`
+(set in `RattenChatter/RattenChatter.csproj`). Override it with:
 
 ```bash
 dotnet build RattenChatter.sln -c Release -p:GameDirectory="D:\Steam\steamapps\common\Nuclear Option"
