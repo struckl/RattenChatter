@@ -1,4 +1,4 @@
-# Ratten Chatter
+# Ratten Chatter | Nuclear Option
 
 Ambient radio chatter for
 [Nuclear Option](https://store.steampowered.com/app/2168680/Nuclear_Option/),
@@ -62,16 +62,17 @@ first flight.
 
 ## Configuration
 
-All settings live under the `Radio Chatter` section and are editable in-game
-with [ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager).
+Settings live under `1. General` (master switch, volume) and `2. Timing`
+(pauses between conversations) and are editable in-game with
+[ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager).
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `Enabled` | `true` | Play ambient radio chatter while flying. |
-| `Volume` | `1.2` | Chatter volume relative to other interface audio (voice warnings play at `3.0`). The clips are already mixed low; raise this to bring the net forward. |
-| `MinPauseSeconds` | `12` | Minimum silence between conversations. |
-| `MaxPauseSeconds` | `45` | Maximum silence between conversations. |
-| `BusyNetChance` | `0.2` | Chance the next conversation starts within a few seconds instead of after the usual pause, so traffic comes in waves. Set to `0` for evenly spaced chatter. |
+| `Enable mod` | `true` | Master switch. Turning it on mid-game needs a restart; turning it off works immediately. |
+| `Volume` | `1.2` | How loud the chatter is. `1` matches the game's other cockpit sounds; the clips are already mixed low, so raise this to bring the net forward. |
+| `Shortest pause (seconds)` | `12` | Minimum silence between conversations. |
+| `Longest pause (seconds)` | `45` | Maximum silence between conversations. |
+| `Busy radio chance` | `0.2` | Chance the next conversation starts within a few seconds instead of after the usual pause, so traffic comes in waves. Set to `0` for evenly spaced chatter. |
 
 ## Adding your own chatter
 
@@ -102,9 +103,9 @@ chatter13a.mp3   ->  conversation "chatter13", line 1
 chatter13b.mp3   ->  conversation "chatter13", line 2
 ```
 
-Either way the plugin goes quiet for a random
-`MinPauseSeconds`–`MaxPauseSeconds` between conversations and works through all
-of them before repeating.
+Either way the plugin goes quiet for a random time between `Shortest pause`
+and `Longest pause` between conversations and works through all of them before
+repeating.
 
 ## Building
 
