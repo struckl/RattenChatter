@@ -163,7 +163,8 @@ internal static class RadioChatter
 
     public static void Tick()
     {
-        if (Conversations.Count == 0 || aircraft == null || aircraft.disabled)
+        if (!Plugin.Enabled.Value || Conversations.Count == 0
+            || aircraft == null || aircraft.disabled)
             return;
         if (Time.unscaledTime < nextLineTime)
             return;

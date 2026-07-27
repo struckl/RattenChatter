@@ -43,20 +43,30 @@ public class Plugin : BaseUnityPlugin
     private void BindConfig()
     {
         Enabled = Config.Bind(
-            "Radio Chatter", "Enabled", true,
-            "Play ambient radio chatter in the background while flying.");
+            "1. General", "Enable mod", true,
+            "Master switch for the whole mod. On: quiet background radio chatter plays "
+            + "while you fly. Off: silence. Note: if this was off when the game started, "
+            + "turning it on needs a game restart (the audio is only loaded at startup); "
+            + "turning it off works immediately.");
         Volume = Config.Bind(
-            "Radio Chatter", "Volume", 1.2f,
-            "Chatter volume relative to other interface audio (voice warnings play at 3.0).");
+            "1. General", "Volume", 1.2f,
+            new ConfigDescription(
+                "How loud the chatter is. 1 = same volume as the game's other cockpit "
+                + "sounds, 2 = twice as loud, 0.5 = half as loud.",
+                new AcceptableValueRange<float>(0f, 3f)));
         MinPauseSeconds = Config.Bind(
-            "Radio Chatter", "MinPauseSeconds", 12f,
-            "Minimum silence between chatter conversations.");
+            "2. Timing", "Shortest pause (seconds)", 12f,
+            "After one conversation ends, the radio stays quiet for a random time "
+            + "between 'Shortest pause' and 'Longest pause' before the next one starts.");
         MaxPauseSeconds = Config.Bind(
-            "Radio Chatter", "MaxPauseSeconds", 45f,
-            "Maximum silence between chatter conversations.");
+            "2. Timing", "Longest pause (seconds)", 45f,
+            "The longest the radio stays quiet between two conversations.");
         BusyNetChance = Config.Bind(
-            "Radio Chatter", "BusyNetChance", 0.2f,
-            "Chance (0-1) that the next conversation starts within a few seconds "
-            + "instead of after the usual pause, so traffic comes in waves.");
+            "2. Timing", "Busy radio chance", 0.2f,
+            new ConfigDescription(
+                "Chance that the next conversation starts right after the previous one "
+                + "instead of waiting out the pause, so traffic comes in bursts like a "
+                + "real radio net. 0 = never, 1 = always, 0.2 = 20% of conversations.",
+                new AcceptableValueRange<float>(0f, 1f)));
     }
 }
