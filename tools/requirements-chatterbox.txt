@@ -1,0 +1,7 @@
+# The default Chatterbox engine. Needs an NVIDIA GPU; install torch with CUDA first:
+#   python -m pip install "torch>=2.9" "torchaudio>=2.9" --index-url https://download.pytorch.org/whl/cu128
+chatterbox-tts==0.1.7
+pyarrow
+soundfile
+transformers
+edge-tts==7.3.1

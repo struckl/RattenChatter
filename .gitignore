@@ -7,3 +7,5 @@ Releases/
 __pycache__/
 .claude/
 chatter-preview.mp3
+tools/refs/
+tools/samples/

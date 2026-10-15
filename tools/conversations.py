@@ -697,4 +697,74 @@ CONVERSATIONS = [
             ("MULE", "Sitting tight. As always.", 1.6),
         ],
     ),
+    # ------------------------------------------------------------- later additions
+    # Appended rather than filed under their sections above, so adding them
+    # does not renumber the clips that already ship.
+    dict(
+        tag="picture-changing",
+        mood="tense",
+        lines=[
+            ("MAGIC", "All players, picture is changing. Two groups launching out of Ignus, heading west.", 0),
+            ("WIDOW ONE", "Widow copies two groups. We'll take the northern one.", 1.3),
+            ("MAGIC", "Northern group is yours. Kestrel, you have the southern.", 1.1),
+        ],
+    ),
+    dict(
+        tag="bingo-call",
+        mood="routine",
+        lines=[
+            ("RAZOR TWO", "Razor one, two's bingo.", 0),
+            ("RAZOR ONE", "Copy bingo. Razor flight, knock it off, we're heading home.", 1.0),
+            ("RAZOR TWO", "Two. Should have skipped that last pass.", 1.4),
+        ],
+    ),
+    dict(
+        tag="cleared-bridge",
+        mood="tense",
+        lines=[
+            ("STINGER", "Sledge, Stinger one, in from the north. I've got the bridge.", 0),
+            ("SLEDGE", "Stinger, cleared hot. Watch the Linebreaker on the far bank.", 1.0),
+            ("STINGER", "Off west. Bombs gone.", 1.6),
+        ],
+    ),
+    dict(
+        tag="survivor-aboard",
+        mood="grim",
+        lines=[
+            ("LIFEGUARD", "Warden, Lifeguard one. We have the pilot. He's hurt, but he's talking.", 0),
+            ("WARDEN", "Good copy, Lifeguard. Best news I've had all night.", 1.8),
+        ],
+    ),
+    dict(
+        tag="taxiway-lineup",
+        mood="routine",
+        lines=[
+            ("MARIS TOWER", "Jackal, check your heading. You're lined up on the taxiway.", 0),
+            ("JACKAL", "Uh... yeah. Correcting. That's embarrassing.", 1.4),
+            ("MARIS TOWER", "Happens to everyone once. Don't make it twice.", 1.2),
+        ],
+    ),
+    dict(
+        tag="banter-coffee",
+        mood="banter",
+        lines=[
+            ("TEXACO", "Sentry, Texaco. Any chance somebody up there made coffee?", 0),
+            ("SENTRY", "We made coffee four hours ago. I'd call it historical now.", 1.6),
+            ("TEXACO", "Historical is still coffee.", 1.0),
+        ],
+    ),
+]
+
+# What `generate_chatter.py --samples` renders for auditioning a voice change:
+# every radio profile, every mood, both genders and the most-heard voice (Magic),
+# in the order the reel plays them.
+SAMPLE_TAGS = [
+    "checkin-razor",
+    "defensive-vector",
+    "taxi-maris",
+    "splash",
+    "tanker-bored",
+    "nuke-auth",
+    "radio-check",
+    "danger-close",
 ]

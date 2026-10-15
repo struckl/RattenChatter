@@ -2,10 +2,20 @@
 
 Two stages per line of dialogue:
 
-1. Neural text-to-speech via `edge-tts` (Microsoft Edge's online voices — free,
-   no API key). Each speaker has a fixed voice plus a rate/pitch offset, and
-   every individual line gets a small extra jitter on top so the same character
-   never delivers two lines with identical timing.
+1. Text-to-speech, with one of two engines:
+
+   chatterbox (default)  Chatterbox (Resemble AI, MIT) on the local GPU clones
+       each callsign's VCTK speaker (see cast.py and chatterbox_engine.py).
+       A real person's voice, timing and breath instead of a stock announcer.
+       Delivery follows the conversation's mood: a tense exchange or a line
+       with "!" in it gets more exaggeration, a controller stays level. Each
+       line's take is seeded from its tag, so a rebuild says it the same way.
+
+   edge  The original pipeline and the fallback for a machine without a GPU:
+       Microsoft Edge's online neural voices via `edge-tts` (free, no API key).
+       Each speaker has a fixed voice plus a rate/pitch offset, and every line
+       gets a small extra jitter on top so the same character never delivers
+       two lines with identical timing.
 
 2. A radio treatment in ffmpeg, which is what actually sells it:
      * band-limited to roughly 300–3400 Hz, like a real comms channel
@@ -30,7 +40,9 @@ comparable pacing and noise — only the text changes when you edit a script.
 Usage:
     python tools/generate_chatter.py                 # regenerate everything
     python tools/generate_chatter.py --only banter   # only tags containing "banter"
-    python tools/generate_chatter.py --list-voices   # show available voices
+    python tools/generate_chatter.py --samples       # audition reel, Assets untouched
+    python tools/generate_chatter.py --engine edge   # the edge-tts fallback
+    python tools/generate_chatter.py --list-voices   # show available edge-tts voices
 """
 
 from __future__ import annotations
@@ -49,10 +61,12 @@ import edge_tts
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from cast import CAST  # noqa: E402
-from conversations import CONVERSATIONS  # noqa: E402
+from conversations import CONVERSATIONS, SAMPLE_TAGS  # noqa: E402
+import preview  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 OUT_DIR = REPO / "RattenChatter" / "Assets" / "chatter"
+SAMPLES_DIR = Path(__file__).resolve().parent / "samples"
 SAMPLE_RATE = 24000
 OUT_SAMPLE_RATE = 22050
 
@@ -79,6 +93,33 @@ RADIO_PROFILES = {
     "station": dict(hp=280, lp=3400, presence=3.0, ratio=4, makeup=3, drive=0.82, hiss=0.055, crackle=0.07, level=1.00),
     "cockpit_hot": dict(hp=320, lp=3100, presence=5.0, ratio=3, makeup=6, drive=0.40, hiss=0.090, crackle=0.12, level=1.00),
 }
+
+
+# Chatterbox delivery per conversation mood: (exaggeration, cfg_weight).
+# exaggeration is how much emotion goes in; cfg_weight is how tightly the take
+# follows the reference speaker's pacing — lower is steadier, which offsets the
+# rush high exaggeration brings. Same scale Sea Power Radio uses for its
+# urgency levels.
+MOOD_DELIVERY = {
+    "routine": (0.50, 0.50),
+    "background": (0.50, 0.50),
+    "banter": (0.55, 0.50),
+    "grim": (0.45, 0.50),
+    "tense": (0.65, 0.40),
+}
+URGENT_DELIVERY = (0.85, 0.30)
+
+
+def delivery(mood: str, speaker, text: str) -> tuple[float, float]:
+    """How hard a line is played: the mood, then the person, then the words."""
+    exaggeration, cfg_weight = MOOD_DELIVERY[mood]
+    if speaker.profile == "station":
+        # Controllers are trained to sound bored however bad it gets. That
+        # contrast with the aircrew is half of what makes a tense net tense.
+        exaggeration, cfg_weight = min(exaggeration, 0.55), max(cfg_weight, 0.45)
+    if "!" in text or (speaker.profile == "cockpit_hot" and mood == "tense"):
+        exaggeration, cfg_weight = URGENT_DELIVERY
+    return exaggeration, cfg_weight
 
 
 def check_tools() -> None:
@@ -108,6 +149,16 @@ def validate(conversations) -> None:
         for previous, current in zip(speakers, speakers[1:]):
             if previous == current:
                 problems.append(f"{tag}: {current} speaks twice in a row")
+        if conv["mood"] not in MOOD_DELIVERY:
+            problems.append(f"{tag}: unknown mood '{conv['mood']}'")
+
+    tags = {conv["tag"] for conv in conversations}
+    problems += [f"SAMPLE_TAGS: unknown tag '{tag}'" for tag in SAMPLE_TAGS if tag not in tags]
+    by_vctk: dict[str, list[str]] = {}
+    for name, speaker in CAST.items():
+        by_vctk.setdefault(speaker.vctk, []).append(name)
+    problems += [f"cast.py: {', '.join(names)} share VCTK speaker '{vctk or '(none)'}'"
+                 for vctk, names in by_vctk.items() if len(names) > 1 or not vctk]
 
     if problems:
         sys.exit("conversations.py:\n  " + "\n  ".join(problems))
@@ -248,30 +299,60 @@ def radio_filter(src: Path, dest: Path, profile_name: str, rng: random.Random) -
         sys.exit(f"ffmpeg failed on {src.name}:\n{result.stderr}")
 
 
-async def build(only: str | None) -> None:
+def write_manifest(out_dir: Path, rows: list[str]) -> None:
+    (out_dir / "manifest.txt").write_text(
+        "# Ratten Chatter conversation manifest.\n"
+        "# Generated by tools/generate_chatter.py -- do not edit by hand.\n"
+        "# conversation | file | seconds of dead air before this line\n"
+        + "\n".join(rows)
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+async def build(only: str | None, engine_name: str, samples: bool) -> None:
     check_tools()
     # Always validate the whole file, not just the selection, so a broken
     # exchange cannot hide behind an --only run.
     validate(CONVERSATIONS)
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    selected = [
-        (index, conv)
-        for index, conv in enumerate(CONVERSATIONS, start=1)
-        if only is None or only.lower() in conv["tag"].lower()
-    ]
+    numbered = list(enumerate(CONVERSATIONS, start=1))
+    wanted = [part.strip().lower() for part in only.split(",")] if only else []
+    matching = [(index, conv) for index, conv in numbered
+                if any(part in conv["tag"].lower() for part in wanted)]
+    if samples:
+        # Same file names as the real set, so a sample clip and the shipped
+        # clip it would replace can be compared directly. --only swaps the
+        # standard audition set for a selection of its own, e.g. new lines.
+        reel_name = engine_name if only is None else f"{engine_name}-only"
+        out_dir = SAMPLES_DIR / reel_name
+        if only is None:
+            selected = [(index, conv) for index, conv in numbered if conv["tag"] in SAMPLE_TAGS]
+        else:
+            selected = matching
+        shutil.rmtree(out_dir, ignore_errors=True)
+    else:
+        out_dir = OUT_DIR
+        selected = numbered if only is None else matching
     if not selected:
         sys.exit(f"No conversations match '{only}'.")
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    if only is None:
+    if only is None and not samples:
         # Full rebuild: clear out the previous set so renumbering never leaves
         # orphaned files behind that the plugin would still load. The manifest
         # goes too — if this run dies partway through, a leftover manifest
         # pointing at deleted clips is worse than none at all, and its absence
         # is how we can tell the build did not finish.
-        for stale in OUT_DIR.glob("*.mp3"):
+        for stale in out_dir.glob("*.mp3"):
             stale.unlink()
-        (OUT_DIR / "manifest.txt").unlink(missing_ok=True)
+        (out_dir / "manifest.txt").unlink(missing_ok=True)
+
+    engine = None
+    if engine_name == "chatterbox":
+        from chatterbox_engine import ChatterboxEngine
+
+        engine = ChatterboxEngine()
 
     manifest_rows: list[str] = []
     total_lines = sum(len(conv["lines"]) for _, conv in selected)
@@ -287,40 +368,67 @@ async def build(only: str | None) -> None:
                 rng = random.Random(f"{conv['tag']}|{line_index}|{speaker_name}")
                 suffix = chr(ord("a") + line_index)
                 name = f"chatter{conv_id}{suffix}.mp3"
-                raw = tmpdir / f"raw_{conv_id}{suffix}.mp3"
 
-                await synthesize(text, speaker, rng, raw)
-                radio_filter(raw, OUT_DIR / name, speaker.profile, rng)
+                if engine is None:
+                    raw = tmpdir / f"raw_{conv_id}{suffix}.mp3"
+                    await synthesize(text, speaker, rng, raw)
+                    note = ""
+                else:
+                    raw = tmpdir / f"raw_{conv_id}{suffix}.wav"
+                    # Draw the jitter edge-tts would have used anyway, so both
+                    # engines get the same clicks, hiss and dropouts and an A/B
+                    # between them differs in the voice only.
+                    jitter_prosody(speaker, rng)
+                    exaggeration, cfg_weight = delivery(conv["mood"], speaker, text)
+                    take = engine.say(speaker.vctk, text, raw, seed=f"{conv['tag']}|{line_index}",
+                                      exaggeration=exaggeration, cfg_weight=cfg_weight)
+                    retries = "" if take.tries == 1 else f" x{take.tries}"
+                    note = (f"  [{speaker.vctk} ex {exaggeration:.2f} cfg {cfg_weight:.2f} "
+                            f"{take.seconds:.1f}s CER {take.cer:.2f}{retries}]")
+                radio_filter(raw, out_dir / name, speaker.profile, rng)
 
                 manifest_rows.append(f"chatter{conv_id}|{name}|{gap:.2f}")
                 done += 1
-                print(f"[{done:3d}/{total_lines}] {name}  {speaker_name}: {text[:58]}")
+                print(f"[{done:3d}/{total_lines}] {name}  {speaker_name}: {text[:58]}{note}", flush=True)
 
-    if only is None:
-        manifest = OUT_DIR / "manifest.txt"
-        manifest.write_text(
-            "# Ratten Chatter conversation manifest.\n"
-            "# Generated by tools/generate_chatter.py -- do not edit by hand.\n"
-            "# conversation | file | seconds of dead air before this line\n"
-            + "\n".join(manifest_rows)
-            + "\n",
-            encoding="utf-8",
-        )
-        print(f"\nWrote {len(manifest_rows)} clips and manifest.txt to {OUT_DIR}")
+    if samples:
+        write_manifest(out_dir, manifest_rows)
+        if only is None:
+            keys = [f"chatter{index:02d}" for tag in SAMPLE_TAGS
+                    for index, conv in numbered if conv["tag"] == tag]
+        else:
+            keys = [f"chatter{index:02d}" for index, _ in selected]
+        reel = SAMPLES_DIR / f"{reel_name}.mp3"
+        seconds = preview.stitch(out_dir, keys, reel)
+        print(f"\nReel: {reel} ({seconds:.0f} s, {len(keys)} conversations)")
+        if only is None and (OUT_DIR / "manifest.txt").exists():
+            # The same conversations as they ship today, for an A/B.
+            shipped = SAMPLES_DIR / "shipped.mp3"
+            preview.stitch(OUT_DIR, keys, shipped)
+            print(f"Shipped set, same conversations: {shipped}")
+    elif only is None:
+        write_manifest(out_dir, manifest_rows)
+        print(f"\nWrote {len(manifest_rows)} clips and manifest.txt to {out_dir}")
     else:
         print(f"\nWrote {len(manifest_rows)} clips (manifest left alone; rerun without --only to refresh it)")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--only", help="only rebuild conversations whose tag contains this")
-    parser.add_argument("--list-voices", action="store_true", help="list available English voices")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--only", help="only rebuild conversations whose tag contains this "
+                                       "(comma-separated for several)")
+    parser.add_argument("--engine", choices=("chatterbox", "edge"), default="chatterbox",
+                        help="text-to-speech engine (default: chatterbox)")
+    parser.add_argument("--samples", action="store_true",
+                        help="render SAMPLE_TAGS (or the --only selection) into tools/samples plus a reel; "
+                             "Assets untouched")
+    parser.add_argument("--list-voices", action="store_true", help="list available edge-tts voices")
     args = parser.parse_args()
 
     if args.list_voices:
         asyncio.run(list_voices())
         return
-    asyncio.run(build(args.only))
+    asyncio.run(build(args.only, args.engine, args.samples))
 
 
 if __name__ == "__main__":

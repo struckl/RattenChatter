@@ -4,7 +4,7 @@ Ambient radio chatter for
 [Nuclear Option](https://store.steampowered.com/app/2168680/Nuclear_Option/),
 so the cockpit never feels dead quiet.
 
-Around seventy short conversations play quietly in the background while you fly
+Around eighty short conversations play quietly in the background while you fly
 — check-ins, intercepts, SEAD calls, tanker joins, carrier approaches, a
 nine-line from a forward air controller, a wingman who will not hold formation,
 and the odd release authorisation you would rather not have overheard.
@@ -14,9 +14,13 @@ a tower, or an aircraft and mission control. One call, one answer, maybe a
 closing word. Short enough that you catch it without stopping what you were
 doing, and never a crowd scene that pulls your attention out of the cockpit.
 
-Every callsign has its own voice — around thirty of them across forty distinct
-neural voices and a dozen accents — and every voice goes through a full radio
-treatment: band-limited to a comms channel, compressed flat by the
+Every callsign is its own person — nearly fifty of them, each a different real
+voice: American, Canadian, English, Scottish, Irish, Welsh, Australian, South
+African and Indian, men and women, cloned locally with
+[Chatterbox](https://github.com/resemble-ai/chatterbox) from the studio
+recordings of the CSTR VCTK Corpus. They breathe, hesitate and sound like
+somebody keying a mic rather than a screen reader. Every voice goes through a
+full radio treatment: band-limited to a comms channel, compressed flat by the
 transmitter's level control, dirtied with clipping, and buried in Rauschen —
 a steady open-carrier hiss with a crackle of pops and ticks riding on top,
 opening a fraction of a second before the mic click and closing with a squelch
@@ -129,8 +133,16 @@ A successful build deploys the DLL and assets straight into
 ## Credits
 
 Radio chatter code, scripts and audio pipeline by Lukas Struckl. Voices are
-Microsoft Edge neural voices via [edge-tts](https://github.com/rany2/edge-tts),
-put through an [ffmpeg](https://ffmpeg.org/) radio chain. Built on
+generated with [Chatterbox](https://github.com/resemble-ai/chatterbox) by
+Resemble AI (MIT licence), cloning speakers of the
+[CSTR VCTK Corpus](https://doi.org/10.7488/ds/2645) (CC BY 4.0): Yamagishi, J.,
+Veaux, C., MacDonald, K. (2019), *CSTR VCTK Corpus: English Multi-speaker Corpus
+for CSTR Voice Cloning Toolkit (version 0.92)*, University of Edinburgh, The
+Centre for Speech Technology Research, doi:10.7488/ds/2645. The lines are
+synthetic — none of the VCTK speakers recorded them — and every clip carries
+Resemble AI's inaudible Perth watermark. The edge-tts fallback uses Microsoft
+Edge neural voices via [edge-tts](https://github.com/rany2/edge-tts). All of it
+is put through an [ffmpeg](https://ffmpeg.org/) radio chain. Built on
 [BepInEx](https://github.com/BepInEx/BepInEx) and
 [HarmonyX](https://github.com/BepInEx/HarmonyX). Originally part of
 [MKMods](https://github.com/struckl/MKModsNO), a fork of
